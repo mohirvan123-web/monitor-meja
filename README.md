@@ -52,7 +52,7 @@
         // =========================================================
         // 🚨 PENTING: GANTI IP DI BAWAH INI DENGAN IP LOKAL TABLET ANDA!
         // Contoh: '192.168.0.50'
-        const SERVER_IP = 'IP_LOKAL_TABLET_ANDA'; 
+        const SERVER_IP = '10.208.137.54'; 
         // =========================================================
         const WS_URL = `ws://${SERVER_IP}:8080`;
 
