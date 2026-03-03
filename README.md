@@ -3,195 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gacoan Meja Monitor - Real Time</title>
+    <title>Gacoan Meja - Firebase Version</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* CSS tambahan untuk transisi yang lebih halus */
-        .meja-card {
-            transition: background-color 0.3s ease, transform 0.1s ease;
-        }
-        /* Mencegah highlight sentuhan pada elemen tombol */
-        .no-select {
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-        }
-    </style>
-</head>
-<body class="bg-gray-50 font-sans min-h-screen">
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    <div class="container mx-auto p-4 md:p-8">
-        <header class="text-center mb-6">
-            <h1 class="text-4xl font-extrabold text-red-700 tracking-wider">GACOAN MEJA MONITOR</h1>
-            <p class="text-gray-600 mt-1 font-medium">Sistem Status Meja Real-Time</p>
-        </header>
+        // 🚨 GANTI DENGAN CONFIG FIREBASE ANDA SENDIRI
+const firebaseConfig = {
+  apiKey: "AIzaSyDBQ4Z74pXUHa9sihwG7e_AJLLGTTORcXI",
+  authDomain: "gacoanmeja.firebaseapp.com",
+  databaseURL: "https://gacoanmeja-default-rtdb.firebaseio.com",
+  projectId: "gacoanmeja",
+  storageBucket: "gacoanmeja.firebasestorage.app",
+  messagingSenderId: "829661149102",
+  appId: "1:829661149102:web:937077e9516a7720827a3f",
+  measurementId: "G-4Z0QCZCF95"
+};
 
-        <div class="flex justify-center space-x-4 mb-6 sticky top-0 bg-gray-50 pt-4 z-10 shadow-sm border-b pb-4">
-            <button id="mode-admin1" class="px-5 py-2 rounded-xl font-bold shadow-lg transition duration-300 transform no-select bg-red-600 text-white hover:bg-red-700">
-                Admin 1 (Petugas Meja)
-            </button>
-            <button id="mode-admin2" class="px-5 py-2 rounded-xl font-bold shadow-lg transition duration-300 transform no-select bg-gray-300 text-gray-800 hover:bg-blue-600 hover:text-white">
-                Admin 2 (Penyambut Tamu)
-            </button>
-        </div>
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
-        <div class="flex flex-col sm:flex-row justify-between items-center p-3 mb-6 rounded-lg shadow-md bg-white border border-gray-200">
-            <p class="text-sm font-medium mb-1 sm:mb-0">Mode Aktif: <span id="current-mode" class="font-bold text-red-600">Admin 1</span></p>
-            <p id="connection-status" class="text-sm font-bold text-yellow-600">
-                STATUS: Menghubungkan...
-            </p>
-        </div>
-        
-        <div id="table-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
-            <div class="col-span-full text-center p-8 text-gray-500 bg-white rounded-lg shadow-inner">Memuat data meja...</div>
-        </div>
-    </div>
 
-    <script>
-        // =========================================================
-        // 🚨 PENTING: GANTI IP DI BAWAH INI DENGAN IP LOKAL TABLET ANDA!
-        // Contoh: '192.168.0.50'
-        const SERVER_IP = '10.208.137.54'; 
-        // =========================================================
-        const WS_URL = `ws://${SERVER_IP}:8080`;
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
+        // Inisialisasi 47 Meja secara otomatis jika belum ada
         const tableGrid = document.getElementById('table-grid');
-        const modeAdmin1Btn = document.getElementById('mode-admin1');
-        const modeAdmin2Btn = document.getElementById('mode-admin2');
-        const currentModeDisplay = document.getElementById('current-mode');
-        const connectionStatusDisplay = document.getElementById('connection-status');
-        let currentMode = 'admin1'; 
-        let tableStatus = {}; // Status diisi oleh data dari server
+        let currentMode = 'admin1';
 
-        // Inisialisasi WebSocket
-        let ws;
+        // Fungsi Update Status ke Firebase
+        window.toggleMeja = (id, currentStatus) => {
+            if (currentMode !== 'admin1') return;
+            const newStatus = currentStatus === 'kosong' ? 'terisi' : 'kosong';
+            set(ref(db, 'meja/' + id), { status: newStatus });
+        };
 
-        function connectWebSocket() {
-            connectionStatusDisplay.textContent = 'STATUS: Menghubungkan...';
-            ws = new WebSocket(WS_URL);
+        // Mendengarkan perubahan data secara Real-time
+        onValue(ref(db, 'meja'), (snapshot) => {
+            const data = snapshot.val();
+            renderLayout(data);
+        });
 
-            ws.onopen = () => {
-                console.log("Terhubung ke server WebSocket.");
-                connectionStatusDisplay.textContent = 'STATUS: TERHUBUNG';
-                connectionStatusDisplay.classList.remove('text-yellow-600', 'text-red-600');
-                connectionStatusDisplay.classList.add('text-green-600');
-            };
-
-            ws.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-                if (message.type === 'STATUS_UPDATE') {
-                    tableStatus = message.data; // Perbarui status dari server
-                    renderTables(); // Render ulang tampilan
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error("Kesalahan WebSocket:", error);
-                connectionStatusDisplay.textContent = 'STATUS: GAGAL (Cek IP & Server)';
-                connectionStatusDisplay.classList.remove('text-yellow-600', 'text-green-600');
-                connectionStatusDisplay.classList.add('text-red-600');
-            };
-
-            ws.onclose = () => {
-                console.log("Koneksi terputus. Mencoba menghubungkan kembali dalam 5 detik...");
-                connectionStatusDisplay.textContent = 'STATUS: TERPUTUS';
-                connectionStatusDisplay.classList.remove('text-yellow-600', 'text-green-600');
-                connectionStatusDisplay.classList.add('text-red-600');
-                // Otomatis coba sambungkan kembali
-                setTimeout(connectWebSocket, 5000); 
-            };
-        }
-
-        // Fungsi untuk meng-render (menampilkan) meja
-        function renderTables() {
-            tableGrid.innerHTML = ''; // Kosongkan tampilan lama
-            const tableIds = Object.keys(tableStatus).sort(); // Urutkan ID meja
-
-            if (tableIds.length === 0 && ws.readyState === WebSocket.OPEN) {
-                 tableGrid.innerHTML = `<div class="col-span-full text-center p-8 text-blue-500 bg-white rounded-lg shadow-inner">Server aktif, tetapi belum ada data meja.</div>`;
-                 return;
-            } else if (tableIds.length === 0) {
-                 tableGrid.innerHTML = `<div class="col-span-full text-center p-8 text-gray-500 bg-white rounded-lg shadow-inner">Menghubungkan ke server...</div>`;
-                 return;
-            }
-            
-            tableIds.forEach(tableId => {
-                const status = tableStatus[tableId];
+        function renderLayout(data) {
+            tableGrid.innerHTML = '';
+            for (let i = 1; i <= 47; i++) {
+                const id = "M" + String(i).padStart(2, '0');
+                const status = (data && data[id]) ? data[id].status : 'kosong';
                 
-                let bgColor, statusText, clickableClass;
-
-                if (status === 'kosong') {
-                    bgColor = 'bg-green-500 hover:bg-green-600';
-                    statusText = 'KOSONG';
-                    clickableClass = 'cursor-pointer active:scale-95';
-                } else {
-                    bgColor = 'bg-red-500 hover:bg-red-600';
-                    statusText = 'TERISI';
-                    clickableClass = 'cursor-pointer active:scale-95';
-                }
-
-                // Jika di mode Admin 2, tombol tidak interaktif
-                if (currentMode === 'admin2') {
-                    clickableClass = 'cursor-default';
-                    // Hilangkan efek hover/active di Admin 2
-                    bgColor = status === 'kosong' ? 'bg-green-500' : 'bg-red-500';
-                }
-
-                // Buat elemen HTML untuk meja
-                const tableCard = document.createElement('div');
-                tableCard.className = `meja-card p-6 rounded-xl shadow-xl text-white font-bold text-center ${bgColor} ${clickableClass} no-select`;
-                tableCard.innerHTML = `
-                    <p class="text-5xl mb-2">${tableId}</p>
-                    <p class="text-xl tracking-wider">${statusText}</p>
+                const color = status === 'kosong' ? 'bg-green-500' : 'bg-red-500';
+                const label = status === 'kosong' ? 'KOSONG' : 'TERISI';
+                
+                const card = `
+                    <div onclick="toggleMeja('${id}', '${status}')" 
+                         class="${color} p-4 rounded-lg shadow text-white text-center cursor-pointer transition active:scale-95">
+                        <div class="text-2xl font-bold">${id}</div>
+                        <div class="text-xs">${label}</div>
+                    </div>
                 `;
-                
-                // Tambahkan event listener hanya di mode Admin 1 dan saat WS terhubung
-                if (currentMode === 'admin1' && ws.readyState === WebSocket.OPEN) {
-                    tableCard.addEventListener('click', () => {
-                        // Kirim permintaan perubahan status ke server
-                        ws.send(JSON.stringify({
-                            type: 'TOGGLE_TABLE',
-                            tableId: tableId
-                        }));
-                    });
-                }
-                
-                tableGrid.appendChild(tableCard);
-            });
-        }
-
-        // Fungsi untuk mengubah Mode Aplikasi
-        function setMode(mode) {
-            currentMode = mode;
-            currentModeDisplay.textContent = mode === 'admin1' ? 'Admin 1 (INPUT)' : 'Admin 2 (VIEW)';
-            
-            // Perbarui tampilan tombol
-            if (mode === 'admin1') {
-                modeAdmin1Btn.classList.remove('bg-gray-300', 'text-gray-800', 'hover:bg-blue-600', 'hover:text-white');
-                modeAdmin1Btn.classList.add('bg-red-600', 'text-white', 'hover:bg-red-700');
-                
-                modeAdmin2Btn.classList.add('bg-gray-300', 'text-gray-800', 'hover:bg-blue-600', 'hover:text-white');
-                modeAdmin2Btn.classList.remove('bg-blue-600', 'text-white', 'hover:bg-blue-700');
-            } else {
-                modeAdmin2Btn.classList.remove('bg-gray-300', 'text-gray-800', 'hover:bg-blue-600', 'hover:text-white');
-                modeAdmin2Btn.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700');
-                
-                modeAdmin1Btn.classList.add('bg-red-600', 'text-white', 'hover:bg-red-700');
-                modeAdmin1Btn.classList.remove('bg-red-700', 'ring-2', 'ring-red-300'); // Hapus ring jika ada
+                tableGrid.innerHTML += card;
             }
-            
-            renderTables();
         }
 
-        // Event Listeners untuk tombol Mode
-        modeAdmin1Btn.addEventListener('click', () => setMode('admin1'));
-        modeAdmin2Btn.addEventListener('click', () => setMode('admin2'));
-
-        // Inisialisasi: Mulai koneksi WebSocket dan atur mode awal
-        connectWebSocket();
-        setMode('admin1');
+        // Switch Mode Admin
+        window.setMode = (mode) => {
+            currentMode = mode;
+            document.getElementById('admin-label').innerText = mode === 'admin1' ? 'MODE: ADMIN 1 (INPUT)' : 'MODE: ADMIN 2 (LIHAT)';
+            document.getElementById('mode-indicator').className = mode === 'admin1' ? 'p-2 bg-red-100 text-red-700 font-bold rounded' : 'p-2 bg-blue-100 text-blue-700 font-bold rounded';
+        };
     </script>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-center text-red-600 mb-4">GACOAN MONITOR</h1>
+        
+        <div class="flex gap-2 justify-center mb-6">
+            <button onclick="setMode('admin1')" class="bg-red-600 text-white px-4 py-2 rounded shadow">Admin 1</button>
+            <button onclick="setMode('admin2')" class="bg-blue-600 text-white px-4 py-2 rounded shadow">Admin 2</button>
+        </div>
 
+        <div id="mode-indicator" class="p-2 bg-red-100 text-red-700 font-bold rounded text-center mb-6">
+            <span id="admin-label">MODE: ADMIN 1 (INPUT)</span>
+        </div>
+
+        <div id="table-grid" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-3">
+            </div>
+    </div>
 </body>
 </html>
